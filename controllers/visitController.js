@@ -16,17 +16,8 @@ const createVisit = async (req, res) => {
     // Store visit data in Firestore
     const visitData = { createdBy, dateTime, location, message };
     const visitRef = await db.collection('visitCollection').add(visitData);
-
-    // Get all Workers
-    // const workersSnapshot = await db.collection('userCollection').get();
-    // const phoneNumbers = workersSnapshot.docs
-    //   .filter(doc => doc.data().phoneNumber)
-    //   .map(doc => doc.data().phoneNumber);
-
-    // Send SMS
-    // await sendSMS(phoneNumbers, message);
-
-    res.status(201).json({ message: 'Visit created and notifications sent!', visitId: visitRef.id });
+    res.status(201).json({ message: 'Visit created', visitId: visitRef.id });
+    
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

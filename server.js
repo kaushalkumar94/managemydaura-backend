@@ -10,6 +10,7 @@ app.use(express.urlencoded({ extended: true }));
 const authRoutes = require('./routes/auth');
 const visitRoutes = require('./routes/visit');
 const workerRoutes = require('./routes/worker');
+const smsRoutes = require('./routes/sms');
 
 // Middleware to parse JSON requests
 app.use(express.json());
@@ -25,6 +26,7 @@ app.use('/api/auth', authRoutes);
 // Protecting routes
 app.use('/api/visits', visitRoutes);
 app.use('/api/workers', workerRoutes);
+app.use('/api/sms', smsRoutes);
 
 // Example API route
 app.get('/api/data', (req, res) => {
