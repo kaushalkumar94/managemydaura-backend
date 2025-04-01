@@ -1,5 +1,6 @@
 const { db } = require("../firebaseConfig");
 // const sendSMS = require('../config/smsService');
+const { FormatDateTime } = require("../utils/FormatDateTime");
 
 // Create Visit and Send SMS
 const createVisit = async (req, res) => {
@@ -16,7 +17,26 @@ const createVisit = async (req, res) => {
     // Store visit data in Firestore
     const visitData = { createdBy, dateTime, location, message };
     const visitRef = await db.collection("visitCollection").add(visitData);
-    res.status(201).json({ message: "Visit created", visitId: visitRef.id });
+
+    // Fetch the newly created visit
+    const newVisitSnapshot = await visitRef.get();
+    const newVisit = newVisitSnapshot.data();
+
+    // Log the new visit
+    console.log("New Visit:", newVisit);
+
+    const date = newVisit.dateTime.toDate(); // Convert Firestore Timestamp to JavaScript Date
+    const cleanDateTime = FormatDateTime(date.toISOString());
+
+    const createdVisit = {
+      id: visitRef.id,
+      createdBy: newVisit.createdBy,
+      dateTime: cleanDateTime,
+      location: newVisit.location,
+      message: newVisit.message,
+    };
+
+    res.status(201).json({ message: "Visit created", newVisit: createdVisit });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

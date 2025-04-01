@@ -1,76 +1,109 @@
-const { db } = require('../firebaseConfig');
-const { sendSMS } = require('../utils/sendSMS')
+const { db } = require("../firebaseConfig");
+const { sendSMS } = require("../utils/sendSMS");
+const { FormatDateTime } = require("../utils/FormatDateTime");
 
 const sendSMSController = async (req, res, next) => {
+  const { visitId } = req.body;
 
-    const { visitId } = req.body;
+  // console.log("visitId: ", visitId);
 
-    // console.log("visitId: ", visitId);
+  if (!visitId) {
+    return res.status(500).json({ message: "visitId not provided" });
+  }
 
-    if(!visitId) {
-        return res.status(500).json({ message: "visitId not provided" });
+  try {
+    // Fetch visit details using visitId
+    const visitRef = db.collection("visitCollection").doc(visitId);
+    const visitDoc = await visitRef.get();
+
+    if (!visitDoc.exists) {
+      return res.status(404).json({ message: "Visit not found" });
     }
 
-    try {
+    const { message, location, isSent } = visitDoc.data();
 
-        // Fetch visit details using visitId
-        const visitDoc = await db.collection('visitCollection').doc(visitId).get();
+    // console.log("message: ", message);
+    // console,location("dateTime: ", dateTime);
+    // console.log("location: ", location);
 
-        if (!visitDoc.exists) {
-            return res.status(404).json({ message: 'Visit not found' });
-        }
+    if (!message || !location) {
+      return res
+        .status(400)
+        .json({ message: "Missing required visit details" });
+    }
 
-        const { message, location } = visitDoc.data();
+    // Prevent resending SMS if already sent
+    if (isSent) {
+      return res
+        .status(400)
+        .json({ message: "SMS already sent for this visit" });
+    }
 
-        // console.log("message: ", message);
-        // console,location("dateTime: ", dateTime);
-        // console.log("location: ", location);
+    // Fetch all workers from the database
+    const workersSnapshot = await db.collection("workerCollection").get();
 
-        if (!message || !location) {
-            return res.status(400).json({ message: 'Missing required visit details' });
-        }
+    if (workersSnapshot.empty) {
+      return res.status(404).json({ message: "No workers found" });
+    }
 
-        // Fetch all workers from the database
-        const workersSnapshot = await db.collection('workerCollection').get();
+    // Extract phone numbers and create a comma-separated string
+    const phoneNumbers = workersSnapshot.docs
+      .map((doc) => doc.data().phone)
+      .filter((phone) => phone);
 
-        if (workersSnapshot.empty) {
-            return res.status(404).json({ message: 'No workers found' });
-        }
+    if (phoneNumbers.length === 0) {
+      return res.status(400).json({ message: "No valid phone numbers found" });
+    }
 
-        // Extract phone numbers and create a comma-separated string
-        const phoneNumbers = workersSnapshot.docs
-            .map(doc => doc.data().phone)
-            .filter(phone => phone);
+    const phoneNumbersString = phoneNumbers.join(",");
 
-        if (phoneNumbers.length === 0) {
-            return res.status(400).json({ message: 'No valid phone numbers found' });
-        }
-
-        const phoneNumbersString = phoneNumbers.join(',');
-
-        const createdMessage = `Hello dear member,
+    const createdMessage = `Hello dear member,
                                 ${message}
 
                                 📍 Location: ${location}
 
                                 Thank you.`;
 
-        const visitDetails = {
-            numbers: phoneNumbersString,
-            message: createdMessage,
-        };
+    const visitDetails = {
+      numbers: phoneNumbersString,
+      message: createdMessage,
+    };
 
-        // console.log("visitDetails: ", visitDetails);
+    // console.log("visitDetails: ", visitDetails);
 
-        // Send SMS using the utility function
-        await sendSMS( { visitDetails } );
+    // Send SMS using the utility function
+    await sendSMS({ visitDetails });
 
-        res.status(200).json({ message: 'SMS sent successfully' });
-    } catch (error) {
-        console.error('Error sending SMS:', error);
-        res.status(500).json({ message: 'Failed to send SMS', error: error.message });
-    }
-}
+    // Update the visit document to set isSent to true
+    await visitRef.update({ isSent: true });
 
+    // Fetch the updated visit data
+    const updatedVisitDoc = await visitRef.get();
+    const updatedVisit = updatedVisitDoc.data();
 
-module.exports = { sendSMSController }
+    const date = updatedVisit.dateTime.toDate(); // Convert Firestore Timestamp to JavaScript Date
+    const cleanDateTime = FormatDateTime(date.toISOString());
+
+    const sentVisit = {
+      id: visitRef.id,
+      createdBy: updatedVisit.createdBy,
+      dateTime: cleanDateTime,
+      location: updatedVisit.location,
+      message: updatedVisit.message,
+      isSent: updatedVisit.isSent,
+    };
+
+    console.log("sentVisit: ", sentVisit);
+
+    res
+      .status(200)
+      .json({ message: "SMS sent successfully", sentVisit: sentVisit });
+  } catch (error) {
+    console.error("Error sending SMS:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to send SMS", error: error.message });
+  }
+};
+
+module.exports = { sendSMSController };
