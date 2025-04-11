@@ -52,5 +52,38 @@ const getAllSchedules = async (req, res) => {
   }
 };
 
+const deleteSchedule = async (req, res) => {
+  const scheduleId = req.params.scheduleId;
 
-module.exports = { createSchedule, getAllSchedules };
+  try {
+    // check if scheduleId exist
+    if(!scheduleId) {
+      return res.status(400).json({ message: "Schedule ID is required." });
+    }
+
+    // Delete schedule
+    const db = admin.firestore(); // Initialize Firestore
+    const schedulesCollection = db.collection("scheduleCollection");
+
+    // Check if schedule exists
+    const scheduleRef = schedulesCollection.doc(String(scheduleId));
+    const docSnapshot = await scheduleRef.get();
+
+    if (!docSnapshot.exists) {
+      return res.status(404).json({ message: "Schedule not found." });
+    }
+
+    await scheduleRef.delete();
+    const checkAfterDelete = await scheduleRef.get();
+    if (checkAfterDelete.exists) {
+      return res.status(500).json({ message: "Schedule deletion failed." });
+    }
+    res.status(200).json({ message: "Schedule deleted successfully." });
+  } catch (error) {
+    console.error("Error deleting schedule:", error);
+    res.status(500).json({ message: "Server error while deleting schedule." });
+  }
+};
+
+
+module.exports = { createSchedule, getAllSchedules, deleteSchedule };
