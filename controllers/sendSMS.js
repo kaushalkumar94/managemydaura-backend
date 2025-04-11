@@ -106,4 +106,104 @@ const sendSMSController = async (req, res, next) => {
   }
 };
 
-module.exports = { sendSMSController };
+// SendScheduleSMS
+const sendScheduleSMSController = async (req, res, next) => {
+  const { scheduleId } = req.body;
+  console.log("scheduleId: ", scheduleId);
+  if (!scheduleId) {
+    return res.status(500).json({ message: "scheduleId not provided" });
+  }
+
+  try {
+    // Fetch schedule details using scheduleId
+    const scheduleRef = db.collection("scheduleCollection").doc(scheduleId);
+    const scheduleDoc = await scheduleRef.get();
+
+    if (!scheduleDoc.exists) {
+      return res.status(404).json({ message: "Schedule not found" });
+    }
+
+    const { date, slots, isSent } = scheduleDoc.data();
+
+    console.log("date: ", date);
+    console.log("slot: ", slots);
+    console.log("isSent: ", isSent);
+
+    if (!date || !slots) {
+      return res
+        .status(400)
+        .json({ message: "Missing required schedule details" });
+    }
+
+    // Prevent resending SMS if already sent
+    if (isSent) {
+      return res
+        .status(400)
+        .json({ message: "SMS already sent for this schedule" });
+    }
+
+    // Fetch all workers from the database
+    const workersSnapshot = await db.collection("workerCollection").get();
+
+    if (workersSnapshot.empty) {
+      return res.status(404).json({ message: "No workers found" });
+    }
+
+    // Extract phone numbers and create a comma-separated string
+    const phoneNumbers = workersSnapshot.docs
+      .map((doc) => doc.data().phoneNumber)
+      .filter((phone) => phone);
+
+    if (phoneNumbers.length === 0) {
+      return res.status(400).json({ message: "No valid phone numbers found" });
+    }
+
+    const phoneNumbersString = phoneNumbers.join(",");
+
+    const createdMessage = `Hello dear member, the schedule for the day ${date} is as follows:\n\n` +
+      slots.map((slot, index) =>
+        `${index + 1}. ${slot.time} at location : ${slot.location} --> ${slot.message}`
+      ).join("\n") +
+      `\n\nThank you.`;
+
+    const visitDetails = {
+      numbers: phoneNumbersString,
+      message: createdMessage,
+    };
+
+    // console.log("visitDetails: ", visitDetails);
+
+    // Send SMS using the utility function
+    await sendSMS({ visitDetails });
+
+    if(!sendSMS) {
+      return res.status(500).json({ message: "Failed to send SMS" });
+    }
+
+    // Update the visit document to set isSent to true
+    await scheduleRef.update({ isSent: true });
+
+    // Fetch the updated visit data
+    const updatedScheduleDoc = await scheduleRef.get();
+    const updatedSchedule = updatedScheduleDoc.data();
+
+    const sentSchedule = {
+      id: scheduleRef.id,
+      schedule: updatedSchedule.schedule,
+    }
+
+    console.log("sentSchedule: ", sentSchedule);
+
+    res
+      .status(200)
+      .json({ message: "SMS sent successfully", sentSchedule: sentSchedule });
+  } catch (error) {
+    console.error("Error sending SMS:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to send SMS", error: error.message });
+  }
+}
+
+module.exports = { sendSMSController, sendScheduleSMSController };
+// module.exports = { sendSMSController };

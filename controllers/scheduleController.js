@@ -1,4 +1,4 @@
-const { getDatabase, ref, set, push } = require("firebase-admin/database");
+const admin = require("firebase-admin");
 
 const createSchedule = async (req, res) => {
   const { date, slots } = req.body;
@@ -10,23 +10,47 @@ const createSchedule = async (req, res) => {
   }
 
   try {
-    const db = getDatabase();
-    const scheduleRef = ref(db, "schedules");
+    const db = admin.firestore(); // Initialize Firestore
+    const schedulesCollection = db.collection("scheduleCollection");
 
-    // Store using date as a key (replace "/" to avoid path issues)
-    const safeDateKey = date.replace(/\//g, "-");
-
-    // Log what we’re saving to Firebase
-    console.log("Saving to Firebase at key:", safeDateKey);
+    // Log what we’re saving to Firestore
+    console.log("Saving to Firestore with auto-generated ID");
     console.log("Data:", { date, slots });
 
-    await set(ref(db, `schedules/${safeDateKey}`), { date, slots });
+    const docRef = await schedulesCollection.add({ date, slots });
 
-    res.status(201).json({ message: "Schedule created successfully." });
+    res.status(201).json({ 
+      message: "Schedule created successfully.",
+      scheduleId: docRef.id // return the auto-generated ID (optional)
+    });
   } catch (error) {
     console.error("Error creating schedule:", error);
     res.status(500).json({ message: "Server error while creating schedule." });
   }
 };
 
-module.exports = { createSchedule };
+const getAllSchedules = async (req, res) => {
+  try {
+    const db = admin.firestore(); // Initialize Firestore
+    const schedulesCollection = db.collection("scheduleCollection");
+
+    const snapshot = await schedulesCollection.get();
+
+    if (snapshot.empty) {
+      return res.status(200).json({ message: "No schedules found.", schedules: [] });
+    }
+
+    const schedules = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    res.status(200).json({ schedules });
+  } catch (error) {
+    console.error("Error fetching schedules:", error);
+    res.status(500).json({ message: "Server error while fetching schedules." });
+  }
+};
+
+
+module.exports = { createSchedule, getAllSchedules };

@@ -16,7 +16,7 @@ const sendSMS = async ({ visitDetails }) => {
   try {
     const response = await axios.post('https://www.fast2sms.com/dev/bulkV2', null, {
       headers: {
-        'authorization': process.env.FAST_2_MESSAGE_API_KEY
+        'authorization': X5AMW0cy3FjoOZ6Rl4vYzgPkfQCdsKHGNpiVmbwLD1ExaI8UB2WK5QhJ6Uj7Vyrsf8uFnXOG4PqBeCbI
       },
       params: {
         message,
@@ -26,8 +26,11 @@ const sendSMS = async ({ visitDetails }) => {
       }
     });
 
+    return true; // SMS sent successfully
+
   } catch (error) {
     console.error('SMS Sending Error:', error.response ? error.response.data : error.message);
+    return false; // SMS sending failed
   }
 };
 
