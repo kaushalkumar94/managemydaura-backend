@@ -19,9 +19,9 @@ const createSchedule = async (req, res) => {
 
     const docRef = await schedulesCollection.add({ date, slots });
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: "Schedule created successfully.",
-      scheduleId: docRef.id // return the auto-generated ID (optional)
+      scheduleId: docRef.id, // return the auto-generated ID (optional)
     });
   } catch (error) {
     console.error("Error creating schedule:", error);
@@ -37,12 +37,14 @@ const getAllSchedules = async (req, res) => {
     const snapshot = await schedulesCollection.get();
 
     if (snapshot.empty) {
-      return res.status(200).json({ message: "No schedules found.", schedules: [] });
+      return res
+        .status(200)
+        .json({ message: "No schedules found.", schedules: [] });
     }
 
-    const schedules = snapshot.docs.map(doc => ({
+    const schedules = snapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
     }));
 
     res.status(200).json({ schedules });
@@ -52,5 +54,36 @@ const getAllSchedules = async (req, res) => {
   }
 };
 
+const deleteSchedule = async (req, res) => {
+  const scheduleId = req.params.scheduleId;
+  try {
+    // check if scheduleId exist
+    if (!scheduleId) {
+      return res.status(400).json({ message: "Schedule ID is required." });
+    }
 
-module.exports = { createSchedule, getAllSchedules };
+    // Delete schedule
+    const db = admin.firestore(); // Initialize Firestore
+    const schedulesCollection = db.collection("scheduleCollection");
+
+    // Check if schedule exists
+    const scheduleRef = schedulesCollection.doc(String(scheduleId));
+    const docSnapshot = await scheduleRef.get();
+
+    if (!docSnapshot.exists) {
+      return res.status(404).json({ message: "Schedule not found." });
+    }
+
+    await scheduleRef.delete();
+    const checkAfterDelete = await scheduleRef.get();
+    if (checkAfterDelete.exists) {
+      return res.status(500).json({ message: "Schedule deletion failed." });
+    }
+    res.status(200).json({ message: "Schedule deleted successfully." });
+  } catch (error) {
+    console.error("Error deleting schedule:", error);
+    res.status(500).json({ message: "Server error while deleting schedule." });
+  }
+};
+
+module.exports = { createSchedule, getAllSchedules, deleteSchedule };
