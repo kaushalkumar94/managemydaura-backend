@@ -1,6 +1,154 @@
 const { db } = require("../firebaseConfig");
-const { sendSMS } = require("../utils/sendSMS");
+const {
+  // sendSMS,
+  sendSingleWhatsAppMessage,
+} = require("../utils/sendSMS");
 const { FormatDateTime } = require("../utils/FormatDateTime");
+
+const getWorkersPhoneNumbers = async () => {
+  try {
+    const snapshot = await db.collection("workerCollection").get();
+    const workers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    const phoneNumbers = workers
+      .map((worker) => {
+        let number = worker.phoneNumber;
+        if (number && typeof number === "string") {
+          if (number.length === 10) {
+            return "+91" + number;
+          }
+          if (number.startsWith("91") && number.length === 12) {
+            return "+" + number;
+          }
+          if (number.startsWith("+")) {
+            return number;
+          }
+        }
+        return null;
+      })
+      .filter((number) => number !== null);
+
+    return phoneNumbers;
+  } catch (error) {
+    console.error("Error fetching worker phone numbers:", error.message);
+    throw new Error("Failed to retrieve worker phone numbers.");
+  }
+};
+
+const twilioWhatsAppController = async (req, res) => {
+  const { visitId } = req.body;
+
+  if (!visitId) {
+    return res.status(400).json({ message: "visitId not provided" });
+  }
+
+  let recipientNumbers;
+  let visitDoc;
+  let message, location, isSent, dateTime;
+
+  try {
+    recipientNumbers = await getWorkersPhoneNumbers();
+    if (!recipientNumbers || recipientNumbers.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No worker phone numbers found in the database.",
+      });
+    }
+
+    const visitRef = db.collection("visitCollection").doc(visitId);
+    visitDoc = await visitRef.get();
+
+    if (!visitDoc.exists) {
+      return res.status(404).json({ message: "Visit not found" });
+    }
+
+    ({ message, location, isSent, dateTime } = visitDoc.data());
+
+    if (!message || !location || !dateTime) {
+      return res.status(400).json({
+        message:
+          "Missing required visit details (message, location, or dateTime).",
+      });
+    }
+    if (isSent) {
+      return res
+        .status(400)
+        .json({ message: "WhatsApp message already sent for this visit." });
+    }
+  } catch (error) {
+    console.error(
+      "Error in twilioWhatsAppController data fetching/validation:",
+      error.message
+    );
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message || "An unexpected error occurred during data retrieval.",
+    });
+  }
+
+  const templateContentSid = process.env.TWILIO_VISIT_TEMPLATE_SID; // e.g., 'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
+  if (!templateContentSid) {
+    return res.status(500).json({
+      success: false,
+      message:
+        "WhatsApp templateContentSid is not configured or is a placeholder. Please set it correctly.",
+    });
+  }
+
+  const isTemplate = true;
+
+  const formattedDateTime = FormatDateTime(dateTime.toDate().toISOString());
+
+  const templateVariables = {
+    1: message, // Value for {{1}}
+    2: location, // Value for {{2}}
+    3: formattedDateTime, // Value for {{3}}
+  };
+
+  // const isTemplate = false;
+  // const templateContentSid = null;
+  // const templateVariables = {};
+
+  // const messageBody = `Hello dear member,
+  //                               ${message}
+
+  //                               📍Location: ${location}
+  //                               ⌚ Time: ${formattedDateTime}
+
+  //                               Thank you.`;
+
+  const results = [];
+  for (const number of recipientNumbers) {
+    const result = await sendSingleWhatsAppMessage(
+      number,
+      null,
+      isTemplate,
+      templateContentSid,
+      templateVariables
+    );
+    results.push({ number, ...result });
+  }
+
+  try {
+    const visitRef = db.collection("visitCollection").doc(visitId);
+    await visitRef.update({ isSent: true });
+    console.log(`Visit ${visitId} 'isSent' status updated to true.`);
+  } catch (updateError) {
+    console.error(
+      `Error updating isSent status for visit ${visitId}:`,
+      updateError.message
+    );
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "WhatsApp message sending initiated successfully.",
+    totalRecipients: recipientNumbers.length,
+    results: results,
+  });
+};
 
 const sendSMSController = async (req, res, next) => {
   const { visitId } = req.body;
@@ -20,13 +168,13 @@ const sendSMSController = async (req, res, next) => {
       return res.status(404).json({ message: "Visit not found" });
     }
 
-    const { message, location, isSent } = visitDoc.data();
+    const { message, location, dateTime, isSent } = visitDoc.data();
 
     // console.log("message: ", message);
     // console,location("dateTime: ", dateTime);
     // console.log("location: ", location);
 
-    if (!message || !location) {
+    if (!message || !location || !dateTime) {
       return res
         .status(400)
         .json({ message: "Missing required visit details" });
@@ -60,7 +208,8 @@ const sendSMSController = async (req, res, next) => {
     const createdMessage = `Hello dear member,
                                 ${message}
 
-                                📍 Location: ${location}
+                                📍Location: ${location}
+                                ⌚ Time: ${dateTime} 
 
                                 Thank you.`;
 
@@ -160,10 +309,16 @@ const sendScheduleSMSController = async (req, res, next) => {
 
     const phoneNumbersString = phoneNumbers.join(",");
 
-    const createdMessage = `Hello dear member, the schedule for the day ${date} is as follows:\n\n` +
-      slots.map((slot, index) =>
-        `${index + 1}. ${slot.time} at location : ${slot.location} --> ${slot.message}`
-      ).join("\n") +
+    const createdMessage =
+      `Hello dear member, the schedule for the day ${date} is as follows:\n\n` +
+      slots
+        .map(
+          (slot, index) =>
+            `${index + 1}. ${slot.time} at location : ${slot.location} --> ${
+              slot.message
+            }`
+        )
+        .join("\n") +
       `\n\nThank you.`;
 
     const visitDetails = {
@@ -176,7 +331,7 @@ const sendScheduleSMSController = async (req, res, next) => {
     // Send SMS using the utility function
     await sendSMS({ visitDetails });
 
-    if(!sendSMS) {
+    if (!sendSMS) {
       return res.status(500).json({ message: "Failed to send SMS" });
     }
 
@@ -190,7 +345,7 @@ const sendScheduleSMSController = async (req, res, next) => {
     const sentSchedule = {
       id: scheduleRef.id,
       schedule: updatedSchedule.schedule,
-    }
+    };
 
     console.log("sentSchedule: ", sentSchedule);
 
@@ -203,7 +358,11 @@ const sendScheduleSMSController = async (req, res, next) => {
       .status(500)
       .json({ message: "Failed to send SMS", error: error.message });
   }
-}
+};
 
-module.exports = { sendSMSController, sendScheduleSMSController };
+module.exports = {
+  sendSMSController,
+  sendScheduleSMSController,
+  twilioWhatsAppController,
+};
 // module.exports = { sendSMSController };

@@ -143,10 +143,6 @@ const logoutPA = async (req, res) => {
 const refreshAccessToken = async (req, res) => {
   const { refreshToken } = req.body;
 
-  if (!refreshToken) {
-    return res.status(400).json({ error: "Refresh token is required" });
-  }
-
   try {
     // Verify the refresh token
     const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);

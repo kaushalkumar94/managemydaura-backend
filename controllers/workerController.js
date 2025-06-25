@@ -55,7 +55,7 @@ const addWorker = async (req, res) => {
   }
 };
 
-// List Workers
+//  Workers List
 const listWorkers = async (req, res) => {
   try {
     const snapshot = await db.collection("workerCollection").get();
