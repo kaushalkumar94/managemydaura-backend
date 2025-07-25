@@ -1,16 +1,15 @@
 require("dotenv").config();
 // Import required modules
 const express = require("express");
-const twilio = require("twilio");
 const cors = require("cors"); // Import CORS middleware
 const app = express();
 const port = 3000;
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+// const accountSid = process.env.TWILIO_ACCOUNT_SID;
+// const authToken = process.env.TWILIO_AUTH_TOKEN;
+// const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER;
 
-const client = twilio(accountSid, authToken);
+// const client = twilio(accountSid, authToken);
 
 // Enable CORS for all origins
 app.use(cors());

@@ -19,7 +19,6 @@ router.post("/login", loginPA);
 router.get("/logout", logoutPA);
 
 // Refresh endpoint
-router.get("/refresh", refreshAccessToken);
+router.post("/refresh", refreshAccessToken);
 
 module.exports = router;
-// Compare this snippet from routes/visit.js:

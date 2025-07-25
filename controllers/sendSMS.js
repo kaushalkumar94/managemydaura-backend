@@ -1,13 +1,16 @@
 const { db } = require("../firebaseConfig");
 const {
-  // sendSMS,
   sendSingleWhatsAppMessage,
 } = require("../utils/sendSMS");
 const { FormatDateTime } = require("../utils/FormatDateTime");
 
-const getWorkersPhoneNumbers = async () => {
+const getWorkersPhoneNumbers = async (createdBy) => {
   try {
-    const snapshot = await db.collection("workerCollection").get();
+    let query = db.collection("workerCollection");
+    if (createdBy) {
+      query = query.where("createdBy", "==", createdBy);
+    }
+    const snapshot = await query.get();
     const workers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
     const phoneNumbers = workers
@@ -35,334 +38,189 @@ const getWorkersPhoneNumbers = async () => {
   }
 };
 
-const twilioWhatsAppController = async (req, res) => {
-  const { visitId } = req.body;
+/**
+ * Controller to send WhatsApp messages via Twilio Sandbox.
+ * Expects: { message: string, recipients: [string] }
+ */
+const sendWhatsAppSMSController = async (req, res) => {
+  const { message, dateTime, location, visitId } = req.body;
+  const createdBy = req.user.email; // or req.user.id
 
-  if (!visitId) {
-    return res.status(400).json({ message: "visitId not provided" });
+  if (!message || !dateTime || !location) {
+    return res.status(400).json({ error: "Message, dateTime, and location are required." });
   }
 
-  let recipientNumbers;
-  let visitDoc;
-  let message, location, isSent, dateTime;
-
+  let recipients;
   try {
-    recipientNumbers = await getWorkersPhoneNumbers();
-    if (!recipientNumbers || recipientNumbers.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No worker phone numbers found in the database.",
-      });
-    }
-
-    const visitRef = db.collection("visitCollection").doc(visitId);
-    visitDoc = await visitRef.get();
-
-    if (!visitDoc.exists) {
-      return res.status(404).json({ message: "Visit not found" });
-    }
-
-    ({ message, location, isSent, dateTime } = visitDoc.data());
-
-    if (!message || !location || !dateTime) {
-      return res.status(400).json({
-        message:
-          "Missing required visit details (message, location, or dateTime).",
-      });
-    }
-    if (isSent) {
-      return res
-        .status(400)
-        .json({ message: "WhatsApp message already sent for this visit." });
+    recipients = await getWorkersPhoneNumbers(createdBy);
+    if (!recipients || recipients.length === 0) {
+      return res.status(404).json({ error: "No workers found for this user." });
     }
   } catch (error) {
-    console.error(
-      "Error in twilioWhatsAppController data fetching/validation:",
-      error.message
-    );
-    return res.status(500).json({
-      success: false,
-      message:
-        error.message || "An unexpected error occurred during data retrieval.",
-    });
+    return res.status(500).json({ error: error.message });
   }
 
-  const templateContentSid = process.env.TWILIO_VISIT_TEMPLATE_SID; // e.g., 'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-
-  if (!templateContentSid) {
-    return res.status(500).json({
-      success: false,
-      message:
-        "WhatsApp templateContentSid is not configured or is a placeholder. Please set it correctly.",
-    });
+  // --- Your new dateTime formatting logic ---
+  let formattedDateTime;
+  if (
+    dateTime &&
+    typeof dateTime === "object" &&
+    "date" in dateTime &&
+    "time" in dateTime
+  ) {
+    formattedDateTime = `${dateTime.date} at ${dateTime.time}`;
+  } else if (dateTime && typeof dateTime === "object" && typeof dateTime.toDate === "function") {
+    // Firestore Timestamp (from Firestore SDK)
+    formattedDateTime = FormatDateTime(dateTime.toDate().toISOString());
+  } else if (dateTime && typeof dateTime === "object" && "seconds" in dateTime) {
+    // Firestore Timestamp object from frontend
+    formattedDateTime = FormatDateTime(new Date(dateTime.seconds * 1000).toISOString());
+  } else if (typeof dateTime === "string" || typeof dateTime === "number") {
+    // ISO string or timestamp
+    formattedDateTime = FormatDateTime(new Date(dateTime).toISOString());
+  } else if (dateTime instanceof Date) {
+    formattedDateTime = FormatDateTime(dateTime.toISOString());
+  } else {
+    formattedDateTime = "Invalid date";
   }
 
-  const isTemplate = true;
+  // Format the WhatsApp message
+  const fullMessage =
+    `Hello,\n\n` +
+    `${message}\n\n` +
+    `📍 Location: ${location}\n` +
+    `⏰ Time: ${formattedDateTime}\n\n` +
+    `Thank you.`;
 
-  const formattedDateTime = FormatDateTime(dateTime.toDate().toISOString());
-
-  const templateVariables = {
-    1: message, // Value for {{1}}
-    2: location, // Value for {{2}}
-    3: formattedDateTime, // Value for {{3}}
-  };
-
-  // const isTemplate = false;
-  // const templateContentSid = null;
-  // const templateVariables = {};
-
-  // const messageBody = `Hello dear member,
-  //                               ${message}
-
-  //                               📍Location: ${location}
-  //                               ⌚ Time: ${formattedDateTime}
-
-  //                               Thank you.`;
-
+  // --- Send messages and collect results ---
   const results = [];
-  for (const number of recipientNumbers) {
-    const result = await sendSingleWhatsAppMessage(
-      number,
-      null,
-      isTemplate,
-      templateContentSid,
-      templateVariables
-    );
+  for (const number of recipients) {
+    const result = await sendSingleWhatsAppMessage(number, fullMessage, false);
     results.push({ number, ...result });
   }
 
-  try {
-    const visitRef = db.collection("visitCollection").doc(visitId);
-    await visitRef.update({ isSent: true });
-    console.log(`Visit ${visitId} 'isSent' status updated to true.`);
-  } catch (updateError) {
-    console.error(
-      `Error updating isSent status for visit ${visitId}:`,
-      updateError.message
-    );
+  // --- Update visit's isSent field if visitId is provided ---
+  let updatedVisit = null;
+  if (visitId) {
+    try {
+      await db.collection("visitCollection").doc(visitId).update({ isSent: true });
+      const updatedVisitSnap = await db.collection("visitCollection").doc(visitId).get();
+      const rawVisitData = updatedVisitSnap.data(); // Get the raw data first
+
+      updatedVisit = { // Construct the updatedVisit object ensuring proper structure
+        id: visitId, // Add the ID
+        ...rawVisitData, // Spread the rest of the raw data
+        isSent: true, // Ensure isSent is explicitly set to true
+      };
+
+      // *** Explicitly format dateTime using FormatDateTime ***
+      if (rawVisitData.dateTime && typeof rawVisitData.dateTime.toDate === 'function') {
+          // If it's a Firestore Timestamp, convert to JS Date and then format
+          const jsDate = rawVisitData.dateTime.toDate();
+          updatedVisit.dateTime = FormatDateTime(jsDate.toISOString());
+      } else if (rawVisitData.dateTime && typeof rawVisitData.dateTime === 'object' && 'date' in rawVisitData.dateTime && 'time' in rawVisitData.dateTime) {
+          // If it's already in the desired { date, time } format (unlikely from raw Firestore data but for safety)
+          updatedVisit.dateTime = rawVisitData.dateTime;
+      } else if (typeof rawVisitData.dateTime === 'string') {
+          // If it's a string (e.g., ISO string), format it
+          updatedVisit.dateTime = FormatDateTime(rawVisitData.dateTime);
+      } else {
+          // Fallback for any unexpected format
+          console.warn(`Unexpected dateTime format for raw visit data ${visitId}:`, rawVisitData.dateTime);
+          updatedVisit.dateTime = { date: 'N/A', time: 'N/A' };
+      }
+
+      console.log('Backend sending FINAL updatedVisit to frontend:', updatedVisit); // Updated log message
+
+    } catch (updateError) {
+      console.error(`Failed to update isSent for visit ${visitId}:`, updateError);
+    }
   }
 
   res.status(200).json({
     success: true,
-    message: "WhatsApp message sending initiated successfully.",
-    totalRecipients: recipientNumbers.length,
-    results: results,
+    message: "WhatsApp messages sent.",
+    results,
+    updatedVisit, // <-- include this in the response
   });
 };
 
-const sendSMSController = async (req, res, next) => {
-  const { visitId } = req.body;
+/**
+ * Controller to send WhatsApp messages for schedules via Twilio Sandbox.
+ * Expects: { date: string, slots: [string], messages: [string] }
+ */
+const sendScheduleWhatsAppSMSController = async (req, res) => {
+  const { scheduleId, date, slots, messages} = req.body;
+  const createdBy = req.user.email;
 
-  // console.log("visitId: ", visitId);
-
-  if (!visitId) {
-    return res.status(500).json({ message: "visitId not provided" });
+  if (!date || !Array.isArray(slots) || slots.length === 0) {
+    return res.status(400).json({ error: "Date and slots are required." });
   }
 
+   // *** ADD THIS LOG TO SEE THE INCOMING PAYLOAD ***
+   console.log('sendScheduleWhatsAppSMSController - Received payload:', req.body);
+
+
+  let recipients;
   try {
-    // Fetch visit details using visitId
-    const visitRef = db.collection("visitCollection").doc(visitId);
-    const visitDoc = await visitRef.get();
-
-    if (!visitDoc.exists) {
-      return res.status(404).json({ message: "Visit not found" });
+    recipients = await getWorkersPhoneNumbers(createdBy);
+    if (!recipients || recipients.length === 0) {
+      return res.status(404).json({ error: "No workers found for this user." });
     }
-
-    const { message, location, dateTime, isSent } = visitDoc.data();
-
-    // console.log("message: ", message);
-    // console,location("dateTime: ", dateTime);
-    // console.log("location: ", location);
-
-    if (!message || !location || !dateTime) {
-      return res
-        .status(400)
-        .json({ message: "Missing required visit details" });
-    }
-
-    // Prevent resending SMS if already sent
-    if (isSent) {
-      return res
-        .status(400)
-        .json({ message: "SMS already sent for this visit" });
-    }
-
-    // Fetch all workers from the database
-    const workersSnapshot = await db.collection("workerCollection").get();
-
-    if (workersSnapshot.empty) {
-      return res.status(404).json({ message: "No workers found" });
-    }
-
-    // Extract phone numbers and create a comma-separated string
-    const phoneNumbers = workersSnapshot.docs
-      .map((doc) => doc.data().phone)
-      .filter((phone) => phone);
-
-    if (phoneNumbers.length === 0) {
-      return res.status(400).json({ message: "No valid phone numbers found" });
-    }
-
-    const phoneNumbersString = phoneNumbers.join(",");
-
-    const createdMessage = `Hello dear member,
-                                ${message}
-
-                                📍Location: ${location}
-                                ⌚ Time: ${dateTime} 
-
-                                Thank you.`;
-
-    const visitDetails = {
-      numbers: phoneNumbersString,
-      message: createdMessage,
-    };
-
-    // console.log("visitDetails: ", visitDetails);
-
-    // Send SMS using the utility function
-    await sendSMS({ visitDetails });
-
-    // Update the visit document to set isSent to true
-    await visitRef.update({ isSent: true });
-
-    // Fetch the updated visit data
-    const updatedVisitDoc = await visitRef.get();
-    const updatedVisit = updatedVisitDoc.data();
-
-    const date = updatedVisit.dateTime.toDate(); // Convert Firestore Timestamp to JavaScript Date
-    const cleanDateTime = FormatDateTime(date.toISOString());
-
-    const sentVisit = {
-      id: visitRef.id,
-      createdBy: updatedVisit.createdBy,
-      dateTime: cleanDateTime,
-      location: updatedVisit.location,
-      message: updatedVisit.message,
-      isSent: updatedVisit.isSent,
-    };
-
-    console.log("sentVisit: ", sentVisit);
-
-    res
-      .status(200)
-      .json({ message: "SMS sent successfully", sentVisit: sentVisit });
   } catch (error) {
-    console.error("Error sending SMS:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to send SMS", error: error.message });
-  }
-};
-
-// SendScheduleSMS
-const sendScheduleSMSController = async (req, res, next) => {
-  const { scheduleId } = req.body;
-  console.log("scheduleId: ", scheduleId);
-  if (!scheduleId) {
-    return res.status(500).json({ message: "scheduleId not provided" });
+    return res.status(500).json({ error: error.message });
   }
 
-  try {
-    // Fetch schedule details using scheduleId
-    const scheduleRef = db.collection("scheduleCollection").doc(scheduleId);
-    const scheduleDoc = await scheduleRef.get();
+  // Format the WhatsApp message as per requested template
+  let fullMessage = `📅 Scheduled Activities\n\n`;
+  fullMessage += `🗓️ Date: ${date}\n`;
 
-    if (!scheduleDoc.exists) {
-      return res.status(404).json({ message: "Schedule not found" });
+  // Each slot should be an object: { time, message, location }
+  slots.forEach((slot, idx) => {
+    if (typeof slot === 'object' && slot.time && slot.message && slot.location) {
+      fullMessage += `\n⏰ Time: ${slot.time}\n`;
+      fullMessage += `📝 Message: ${slot.message}\n`;
+      fullMessage += `📍 Location: ${slot.location}\n`;
+    } else if (typeof slot === 'string') {
+      // fallback for old format
+      fullMessage += `\n⏰  Time: ${slot}\n`;
+      if (Array.isArray(messages) && messages[idx]) {
+        fullMessage += `📝 Message: ${messages[idx]}\n`;
+      }
     }
+  });
 
-    const { date, slots, isSent } = scheduleDoc.data();
-
-    console.log("date: ", date);
-    console.log("slot: ", slots);
-    console.log("isSent: ", isSent);
-
-    if (!date || !slots) {
-      return res
-        .status(400)
-        .json({ message: "Missing required schedule details" });
-    }
-
-    // Prevent resending SMS if already sent
-    if (isSent) {
-      return res
-        .status(400)
-        .json({ message: "SMS already sent for this schedule" });
-    }
-
-    // Fetch all workers from the database
-    const workersSnapshot = await db.collection("workerCollection").get();
-
-    if (workersSnapshot.empty) {
-      return res.status(404).json({ message: "No workers found" });
-    }
-
-    // Extract phone numbers and create a comma-separated string
-    const phoneNumbers = workersSnapshot.docs
-      .map((doc) => doc.data().phoneNumber)
-      .filter((phone) => phone);
-
-    if (phoneNumbers.length === 0) {
-      return res.status(400).json({ message: "No valid phone numbers found" });
-    }
-
-    const phoneNumbersString = phoneNumbers.join(",");
-
-    const createdMessage =
-      `Hello dear member, the schedule for the day ${date} is as follows:\n\n` +
-      slots
-        .map(
-          (slot, index) =>
-            `${index + 1}. ${slot.time} at location : ${slot.location} --> ${
-              slot.message
-            }`
-        )
-        .join("\n") +
-      `\n\nThank you.`;
-
-    const visitDetails = {
-      numbers: phoneNumbersString,
-      message: createdMessage,
-    };
-
-    // console.log("visitDetails: ", visitDetails);
-
-    // Send SMS using the utility function
-    await sendSMS({ visitDetails });
-
-    if (!sendSMS) {
-      return res.status(500).json({ message: "Failed to send SMS" });
-    }
-
-    // Update the visit document to set isSent to true
-    await scheduleRef.update({ isSent: true });
-
-    // Fetch the updated visit data
-    const updatedScheduleDoc = await scheduleRef.get();
-    const updatedSchedule = updatedScheduleDoc.data();
-
-    const sentSchedule = {
-      id: scheduleRef.id,
-      schedule: updatedSchedule.schedule,
-    };
-
-    console.log("sentSchedule: ", sentSchedule);
-
-    res
-      .status(200)
-      .json({ message: "SMS sent successfully", sentSchedule: sentSchedule });
-  } catch (error) {
-    console.error("Error sending SMS:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to send SMS", error: error.message });
+  // Send messages and collect results
+  const results = [];
+  for (const number of recipients) {
+    const result = await sendSingleWhatsAppMessage(number, fullMessage, false);
+    results.push({ number, ...result });
   }
+
+  // --- Update schedule's isSent field if scheduleId is provided ---
+  let updatedSchedule = null;
+  if (scheduleId) {
+    try {
+      await db.collection("scheduleCollection").doc(scheduleId).update({ isSent: true });
+      // Fetch the updated schedule
+      const updatedScheduleSnap = await db.collection("scheduleCollection").doc(scheduleId).get();
+      updatedSchedule = updatedScheduleSnap.data();
+      updatedSchedule.id = scheduleId;
+      console.log('Updated schedule:', updatedSchedule);
+    } catch (updateError) {
+      console.error(`Failed to update isSent for schedule ${scheduleId}:`, updateError);
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "WhatsApp messages sent for schedule.",
+    results,
+    updatedSchedule, 
+  });
 };
 
 module.exports = {
-  sendSMSController,
-  sendScheduleSMSController,
-  twilioWhatsAppController,
+  sendWhatsAppSMSController,
+  sendScheduleWhatsAppSMSController,
 };
-// module.exports = { sendSMSController };

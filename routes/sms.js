@@ -1,16 +1,12 @@
 const express = require("express");
 const router = express.Router();
+const { sendWhatsAppSMSController, sendScheduleWhatsAppSMSController } = require("../controllers/sendSMS");
+const { protect } = require("../middlewares/protect");
 
-// Import auth controller
-const {
-  sendSMSController,
-  sendScheduleSMSController,
-  twilioWhatsAppController,
-} = require("../controllers/sendSMS");
+// POST /api/sms/whatsapp
+router.post("/whatsapp",protect, sendWhatsAppSMSController);
 
-// Register PA
-router.post("/sendsms", sendSMSController);
-router.post("/sendschedule", sendScheduleSMSController);
-router.post("/sendwhatsappvisit", twilioWhatsAppController);
+// POST /api/sms/schedule-whatsapp
+router.post("/schedule-whatsapp", protect, sendScheduleWhatsAppSMSController);
 
 module.exports = router;

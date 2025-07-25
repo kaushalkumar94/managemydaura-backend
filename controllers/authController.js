@@ -6,6 +6,7 @@ const {
   generateRefreshToken,
 } = require("../utils/generateJWT");
 const { FormatDateTime } = require("../utils/FormatDateTime.js");
+const jwt = require("jsonwebtoken");
 // Register PA
 const registerPA = async (req, res) => {
   console.log("registerPA");
@@ -141,11 +142,16 @@ const logoutPA = async (req, res) => {
 
 // grant new access token
 const refreshAccessToken = async (req, res) => {
+  console.log("Refresh endpoint hit");
   const { refreshToken } = req.body;
 
   try {
     // Verify the refresh token
-    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+
+    if (!decoded.email) {
+      return res.status(400).json({ error: "Invalid refresh token payload" });
+    }
 
     // Check if the refresh token exists in the database
     const userSnapshot = await db
@@ -155,22 +161,27 @@ const refreshAccessToken = async (req, res) => {
       .get();
 
     if (userSnapshot.empty) {
+      console.warn('Attempted refresh with invalid/used/unmatched token for email:', decoded.email);
       return res
         .status(403)
-        .json({ error: "Invalid or expired refresh token" });
+        .json({ error: "Invalid or unauthorized refresh token. Please log in again." });
     }
 
     const userDoc = userSnapshot.docs[0];
     const user = userDoc.data();
 
-    // Generate a new access token
-    const accessToken = jwt.sign(
-      { userID: user.uid, email: user.email },
-      process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: "15m" }
-    );
+    await userDoc.ref.update({ refreshToken: "" });
 
-    res.status(200).json({ accessToken });
+    const newAccessToken = generateAccessToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+
+    await userDoc.ref.update({ refreshToken: newRefreshToken }); // <-- Save NEW REFRESH TOKEN
+
+    // 6. Send BOTH new tokens back to the client
+    res.status(200).json({
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken // <-- Send the NEW REFRESH TOKEN back
+    });
   } catch (error) {
     console.error("Error refreshing token:", error);
 

@@ -18,10 +18,10 @@ const protect = (req, res, next) => {
 
   try {
     // Verify the token using the secret key
-    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Ensure the decoded token has the required data
-    if (!decoded || !decoded.email || !decoded.userID) {
+    if (!decoded || !decoded.email) {
       return res.status(401).json({ error: 'Invalid token payload' });
     }
 

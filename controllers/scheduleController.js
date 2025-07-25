@@ -15,9 +15,9 @@ const createSchedule = async (req, res) => {
 
     // Log what we’re saving to Firestore
     console.log("Saving to Firestore with auto-generated ID");
-    console.log("Data:", { date, slots });
+    console.log("Data:", { date, slots, email: req.user.email });
 
-    const docRef = await schedulesCollection.add({ date, slots });
+    const docRef = await schedulesCollection.add({ date, slots, email: req.user.email });
 
     res.status(201).json({
       message: "Schedule created successfully.",
@@ -34,7 +34,8 @@ const getAllSchedules = async (req, res) => {
     const db = admin.firestore(); // Initialize Firestore
     const schedulesCollection = db.collection("scheduleCollection");
 
-    const snapshot = await schedulesCollection.get();
+    // Filter schedules by email from JWT
+    const snapshot = await schedulesCollection.where("email", "==", req.user.email).get();
 
     if (snapshot.empty) {
       return res
