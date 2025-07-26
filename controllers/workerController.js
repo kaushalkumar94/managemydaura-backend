@@ -1,61 +1,43 @@
 const { db } = require("../firebaseConfig");
 
-// Add Worker
-const addWorker = async (req, res) => {
-  console.log(req.body);
-  console.log("workerData: ", req.body.workersData);
-
-  const { workersData } = req.body;
+// Add Multiple Workers
+const addWorkers = async (req, res) => {
+  const { workersData } = req.body; // <-- Use workersData
+  const createdBy = req.user.email; // or req.user.id
 
   if (!workersData || !Array.isArray(workersData) || workersData.length === 0) {
-    return res.status(403).json({ message: "Provide valid workers data" });
+    return res.status(400).json({ error: "Provide an array of workers." });
+  }
+
+  // Validate all workers
+  for (const worker of workersData) {
+    if (!worker.name || !worker.phoneNumber) {
+      return res.status(400).json({ error: "Each worker must have a name and phoneNumber." });
+    }
   }
 
   try {
+    const batch = db.batch();
     const workerCollection = db.collection("workerCollection");
 
-    // Get all existing phone numbers to avoid duplicates
-    const existingWorkersSnapshot = await workerCollection
-      .where(
-        "phoneNumber",
-        "in",
-        workersData.map((w) => w.phoneNumber)
-      )
-      .get();
-
-    const existingPhoneNumbers = new Set();
-    existingWorkersSnapshot.forEach((doc) => {
-      existingPhoneNumbers.add(doc.data().phoneNumber);
-    });
-
-    // Filter out workers that already exist
-    const newWorkers = workersData.filter(
-      (w) => !existingPhoneNumbers.has(w.phoneNumber)
-    );
-
-    if (newWorkers.length === 0) {
-      return res.status(400).json({ message: "All workers already exist" });
-    }
-
-    // Batch write to Firestore for efficiency
-    const batch = db.batch();
-    newWorkers.forEach((worker) => {
+    workersData.forEach(worker => {
       const docRef = workerCollection.doc(); // Auto-generate ID
-      batch.set(docRef, worker);
+      batch.set(docRef, {
+        name: worker.name,
+        phoneNumber: worker.phoneNumber,
+        createdBy,
+      });
     });
 
     await batch.commit();
 
-    res.status(201).json({
-      message: "Workers added successfully",
-      addedWorkers: newWorkers.length,
-    });
+    res.status(201).json({ message: "Workers added successfully.", addedWorkers: workersData.length });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Failed to add workers." });
   }
 };
 
-// List Workers
+//  Workers List
 const listWorkers = async (req, res) => {
   try {
     const snapshot = await db.collection("workerCollection").get();
@@ -66,4 +48,7 @@ const listWorkers = async (req, res) => {
   }
 };
 
-module.exports = { addWorker, listWorkers };
+module.exports = {
+  addWorkers,
+  listWorkers,
+};

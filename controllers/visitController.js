@@ -12,10 +12,10 @@ const createVisit = async (req, res) => {
 
   try {
     // Convert to Date object
-    const dateTime = new Date(req.body.dateTime);
+    const dateTimeObj = new Date(dateTime);
 
-    // Store visit data in Firestore
-    const visitData = { createdBy, dateTime, location, message };
+    // Store visit data in Firestore, with isSent: false
+    const visitData = { createdBy, dateTime: dateTimeObj, location, message, isSent: false };
     const visitRef = await db.collection("visitCollection").add(visitData);
 
     // Fetch the newly created visit
@@ -34,6 +34,7 @@ const createVisit = async (req, res) => {
       dateTime: cleanDateTime,
       location: newVisit.location,
       message: newVisit.message,
+      isSent: newVisit.isSent, // Include isSent in the response
     };
 
     res.status(201).json({ message: "Visit created", newVisit: createdVisit });

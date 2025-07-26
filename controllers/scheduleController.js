@@ -15,13 +15,13 @@ const createSchedule = async (req, res) => {
 
     // Log what we’re saving to Firestore
     console.log("Saving to Firestore with auto-generated ID");
-    console.log("Data:", { date, slots });
+    console.log("Data:", { date, slots, email: req.user.email });
 
-    const docRef = await schedulesCollection.add({ date, slots });
+    const docRef = await schedulesCollection.add({ date, slots, email: req.user.email });
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: "Schedule created successfully.",
-      scheduleId: docRef.id // return the auto-generated ID (optional)
+      scheduleId: docRef.id, // return the auto-generated ID (optional)
     });
   } catch (error) {
     console.error("Error creating schedule:", error);
@@ -34,15 +34,18 @@ const getAllSchedules = async (req, res) => {
     const db = admin.firestore(); // Initialize Firestore
     const schedulesCollection = db.collection("scheduleCollection");
 
-    const snapshot = await schedulesCollection.get();
+    // Filter schedules by email from JWT
+    const snapshot = await schedulesCollection.where("email", "==", req.user.email).get();
 
     if (snapshot.empty) {
-      return res.status(200).json({ message: "No schedules found.", schedules: [] });
+      return res
+        .status(200)
+        .json({ message: "No schedules found.", schedules: [] });
     }
 
-    const schedules = snapshot.docs.map(doc => ({
+    const schedules = snapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
     }));
 
     res.status(200).json({ schedules });
@@ -52,20 +55,17 @@ const getAllSchedules = async (req, res) => {
   }
 };
 
+// This is the ONLY instance of deleteSchedule that should be in this file
 const deleteSchedule = async (req, res) => {
-  const scheduleId = req.params.scheduleId;
-
+  const scheduleId = req.params.scheduleId; // Get scheduleId from URL parameters
   try {
-    // check if scheduleId exist
-    if(!scheduleId) {
+    if (!scheduleId) {
       return res.status(400).json({ message: "Schedule ID is required." });
     }
 
-    // Delete schedule
-    const db = admin.firestore(); // Initialize Firestore
+    const db = admin.firestore(); // Assuming admin is initialized
     const schedulesCollection = db.collection("scheduleCollection");
 
-    // Check if schedule exists
     const scheduleRef = schedulesCollection.doc(String(scheduleId));
     const docSnapshot = await scheduleRef.get();
 
@@ -74,7 +74,7 @@ const deleteSchedule = async (req, res) => {
     }
 
     await scheduleRef.delete();
-    const checkAfterDelete = await scheduleRef.get();
+    const checkAfterDelete = await scheduleRef.get(); // This re-check is fine, but consider eventual consistency
     if (checkAfterDelete.exists) {
       return res.status(500).json({ message: "Schedule deletion failed." });
     }

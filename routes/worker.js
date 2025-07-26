@@ -2,12 +2,13 @@ const express = require('express');
 const router = express.Router();
 
 // Import worker controller
-const { addWorker, listWorkers } = require('../controllers/workerController');
+const { addWorkers, listWorkers } = require('../controllers/workerController');
+const { protect } = require('../middlewares/protect');
 
 // Add Worker
-router.post('/add', addWorker);
+router.post('/add', protect, addWorkers);
 
 // List Workers
-router.get('/list', listWorkers);
+router.get('/list', protect, listWorkers);
 
 module.exports = router;
