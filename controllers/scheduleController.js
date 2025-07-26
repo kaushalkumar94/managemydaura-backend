@@ -55,19 +55,17 @@ const getAllSchedules = async (req, res) => {
   }
 };
 
+// This is the ONLY instance of deleteSchedule that should be in this file
 const deleteSchedule = async (req, res) => {
-  const scheduleId = req.params.scheduleId;
+  const scheduleId = req.params.scheduleId; // Get scheduleId from URL parameters
   try {
-    // check if scheduleId exist
     if (!scheduleId) {
       return res.status(400).json({ message: "Schedule ID is required." });
     }
 
-    // Delete schedule
-    const db = admin.firestore(); // Initialize Firestore
+    const db = admin.firestore(); // Assuming admin is initialized
     const schedulesCollection = db.collection("scheduleCollection");
 
-    // Check if schedule exists
     const scheduleRef = schedulesCollection.doc(String(scheduleId));
     const docSnapshot = await scheduleRef.get();
 
@@ -76,7 +74,7 @@ const deleteSchedule = async (req, res) => {
     }
 
     await scheduleRef.delete();
-    const checkAfterDelete = await scheduleRef.get();
+    const checkAfterDelete = await scheduleRef.get(); // This re-check is fine, but consider eventual consistency
     if (checkAfterDelete.exists) {
       return res.status(500).json({ message: "Schedule deletion failed." });
     }
@@ -86,5 +84,6 @@ const deleteSchedule = async (req, res) => {
     res.status(500).json({ message: "Server error while deleting schedule." });
   }
 };
+
 
 module.exports = { createSchedule, getAllSchedules, deleteSchedule };
