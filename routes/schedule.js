@@ -11,6 +11,6 @@ const { sendScheduleWhatsAppSMSController } = require("../controllers/sendSMS");
 
 router.post("/create", protect, createSchedule); // or remove `protect` if not needed
 router.get("/fetchall", protect, getAllSchedules); // fetch all the schedules for the user (filtered by email)
-router.delete("/delete/:scheduleId", deleteSchedule); // delete schedule by ID
+router.delete("/delete/:scheduleId", protect, deleteSchedule); // delete schedule by ID
 
 module.exports = router;
