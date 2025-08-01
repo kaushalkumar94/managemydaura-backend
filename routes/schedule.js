@@ -6,6 +6,7 @@ const {
   getAllSchedules,
   deleteSchedule,
 } = require("../controllers/scheduleController");
+
 const { protect } = require("../middlewares/protect"); // if you want protected route
 const { sendScheduleWhatsAppSMSController } = require("../controllers/sendSMS");
 
