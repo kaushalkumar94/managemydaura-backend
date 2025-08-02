@@ -2,7 +2,6 @@ const { db } = require("../firebaseConfig");
 // const sendSMS = require('../config/smsService');
 const { FormatDateTime } = require("../utils/FormatDateTime");
 
-// Create Visit and Send SMS
 const createVisit = async (req, res) => {
   const { createdBy, dateTime, location, message } = req.body;
 
@@ -11,21 +10,23 @@ const createVisit = async (req, res) => {
   }
 
   try {
-    // Convert to Date object
     const dateTimeObj = new Date(dateTime);
 
-    // Store visit data in Firestore, with isSent: false
-    const visitData = { createdBy, dateTime: dateTimeObj, location, message, isSent: false };
+    const visitData = {
+      createdBy,
+      dateTime: dateTimeObj,
+      location,
+      message,
+      isSent: false,
+    };
     const visitRef = await db.collection("visitCollection").add(visitData);
 
-    // Fetch the newly created visit
     const newVisitSnapshot = await visitRef.get();
     const newVisit = newVisitSnapshot.data();
 
-    // Log the new visit
     console.log("New Visit:", newVisit);
 
-    const date = newVisit.dateTime.toDate(); // Convert Firestore Timestamp to JavaScript Date
+    const date = newVisit.dateTime.toDate(); // Firestore Timestamp to JavaScript Date
     const cleanDateTime = FormatDateTime(date.toISOString());
 
     const createdVisit = {
@@ -34,7 +35,7 @@ const createVisit = async (req, res) => {
       dateTime: cleanDateTime,
       location: newVisit.location,
       message: newVisit.message,
-      isSent: newVisit.isSent, // Include isSent in the response
+      isSent: newVisit.isSent,
     };
 
     res.status(201).json({ message: "Visit created", newVisit: createdVisit });
@@ -47,12 +48,10 @@ const deleteVisit = async (req, res) => {
   const visitId = req.params.visitId;
 
   try {
-    // Check if visit exists
     if (!visitId) {
       return res.status(400).json({ error: "Visit ID is required" });
     }
 
-    // Delete visit
     const visitRef = db.collection("visitCollection").doc(String(visitId));
     const docSnapshot = await visitRef.get();
 

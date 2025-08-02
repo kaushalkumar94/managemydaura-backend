@@ -11,7 +11,7 @@ const FormatDateTime = (dateTime) => {
   let hours = dateObj.getHours();
   const minutes = String(dateObj.getMinutes()).padStart(2, "0");
   const amPm = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12 || 12; // Convert 24h to 12h format
+  hours = hours % 12 || 12; // 24h to 12h format
   const formattedTime = `${hours}:${minutes} ${amPm}`;
 
   return { date: formattedDate, time: formattedTime };

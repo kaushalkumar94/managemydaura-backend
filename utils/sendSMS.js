@@ -1,16 +1,14 @@
-require("dotenv").config(); // Load environment variables for Twilio credentials
+require("dotenv").config();
 
 const twilio = require("twilio");
 const axios = require("axios");
 
-// Initialize Twilio client once when the module is loaded
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const twilioWhatsAppNumber =
   process.env.TWILIO_WHATSAPP_SANDBOX_NUMBER ||
   process.env.TWILIO_WHATSAPP_PRODUCTION_NUMBER;
 
-// Ensure client is initialized only if credentials are available
 let client;
 if (accountSid && authToken) {
   client = twilio(accountSid, authToken);
@@ -20,15 +18,6 @@ if (accountSid && authToken) {
   );
 }
 
-/**
- * Sends a single WhatsApp message.
- * @param {string} to - The recipient's WhatsApp number in E.164 format (e.g., '+919876543210').
- * @param {string|null} body - The message body (for freeform messages). Null if using a template.
- * @param {boolean} isTemplate - True if sending a template message, false otherwise.
- * @param {string|null} templateContentSid - The Content SID of the approved template (required if isTemplate is true).
- * @param {Object} templateVariables - An object containing variables for the template (e.g., {'1': 'Name', '2': 'Value'}).
- * @returns {Object} - An object indicating success/failure and message SID or error.
- */
 async function sendSingleWhatsAppMessage(
   to,
   body,
