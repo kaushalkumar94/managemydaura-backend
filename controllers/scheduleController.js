@@ -10,18 +10,21 @@ const createSchedule = async (req, res) => {
   }
 
   try {
-    const db = admin.firestore(); // Initialize Firestore
+    const db = admin.firestore();
     const schedulesCollection = db.collection("scheduleCollection");
 
-    // Log what we’re saving to Firestore
     console.log("Saving to Firestore with auto-generated ID");
     console.log("Data:", { date, slots, email: req.user.email });
 
-    const docRef = await schedulesCollection.add({ date, slots, email: req.user.email });
+    const docRef = await schedulesCollection.add({
+      date,
+      slots,
+      email: req.user.email,
+    });
 
     res.status(201).json({
       message: "Schedule created successfully.",
-      scheduleId: docRef.id, // return the auto-generated ID (optional)
+      scheduleId: docRef.id,
     });
   } catch (error) {
     console.error("Error creating schedule:", error);
@@ -31,11 +34,12 @@ const createSchedule = async (req, res) => {
 
 const getAllSchedules = async (req, res) => {
   try {
-    const db = admin.firestore(); // Initialize Firestore
+    const db = admin.firestore();
     const schedulesCollection = db.collection("scheduleCollection");
 
-    // Filter schedules by email from JWT
-    const snapshot = await schedulesCollection.where("email", "==", req.user.email).get();
+    const snapshot = await schedulesCollection
+      .where("email", "==", req.user.email)
+      .get();
 
     if (snapshot.empty) {
       return res
@@ -55,15 +59,14 @@ const getAllSchedules = async (req, res) => {
   }
 };
 
-// This is the ONLY instance of deleteSchedule that should be in this file
 const deleteSchedule = async (req, res) => {
-  const scheduleId = req.params.scheduleId; // Get scheduleId from URL parameters
+  const scheduleId = req.params.scheduleId;
   try {
     if (!scheduleId) {
       return res.status(400).json({ message: "Schedule ID is required." });
     }
 
-    const db = admin.firestore(); // Assuming admin is initialized
+    const db = admin.firestore();
     const schedulesCollection = db.collection("scheduleCollection");
 
     const scheduleRef = schedulesCollection.doc(String(scheduleId));
@@ -74,7 +77,7 @@ const deleteSchedule = async (req, res) => {
     }
 
     await scheduleRef.delete();
-    const checkAfterDelete = await scheduleRef.get(); // This re-check is fine, but consider eventual consistency
+    const checkAfterDelete = await scheduleRef.get();
     if (checkAfterDelete.exists) {
       return res.status(500).json({ message: "Schedule deletion failed." });
     }
@@ -84,6 +87,5 @@ const deleteSchedule = async (req, res) => {
     res.status(500).json({ message: "Server error while deleting schedule." });
   }
 };
-
 
 module.exports = { createSchedule, getAllSchedules, deleteSchedule };

@@ -1,18 +1,18 @@
 const { db } = require("../firebaseConfig");
 
-// Add Multiple Workers
 const addWorkers = async (req, res) => {
-  const { workersData } = req.body; // <-- Use workersData
+  const { workersData } = req.body;
   const createdBy = req.user.email; // or req.user.id
 
   if (!workersData || !Array.isArray(workersData) || workersData.length === 0) {
     return res.status(400).json({ error: "Provide an array of workers." });
   }
 
-  // Validate all workers
   for (const worker of workersData) {
     if (!worker.name || !worker.phoneNumber) {
-      return res.status(400).json({ error: "Each worker must have a name and phoneNumber." });
+      return res
+        .status(400)
+        .json({ error: "Each worker must have a name and phoneNumber." });
     }
   }
 
@@ -20,8 +20,8 @@ const addWorkers = async (req, res) => {
     const batch = db.batch();
     const workerCollection = db.collection("workerCollection");
 
-    workersData.forEach(worker => {
-      const docRef = workerCollection.doc(); // Auto-generate ID
+    workersData.forEach((worker) => {
+      const docRef = workerCollection.doc();
       batch.set(docRef, {
         name: worker.name,
         phoneNumber: worker.phoneNumber,
@@ -31,13 +31,17 @@ const addWorkers = async (req, res) => {
 
     await batch.commit();
 
-    res.status(201).json({ message: "Workers added successfully.", addedWorkers: workersData.length });
+    res
+      .status(201)
+      .json({
+        message: "Workers added successfully.",
+        addedWorkers: workersData.length,
+      });
   } catch (error) {
     res.status(500).json({ error: "Failed to add workers." });
   }
 };
 
-//  Workers List
 const listWorkers = async (req, res) => {
   try {
     const snapshot = await db.collection("workerCollection").get();

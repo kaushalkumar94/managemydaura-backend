@@ -1,4 +1,3 @@
-// routes/schedule.js
 const express = require("express");
 const router = express.Router();
 const {
@@ -7,11 +6,11 @@ const {
   deleteSchedule,
 } = require("../controllers/scheduleController");
 
-const { protect } = require("../middlewares/protect"); // if you want protected route
+const { protect } = require("../middlewares/protect");
 const { sendScheduleWhatsAppSMSController } = require("../controllers/sendSMS");
 
-router.post("/create", protect, createSchedule); // or remove `protect` if not needed
-router.get("/fetchall", protect, getAllSchedules); // fetch all the schedules for the user (filtered by email)
-router.delete("/delete/:scheduleId", protect, deleteSchedule); // delete schedule by ID
+router.post("/create", protect, createSchedule);
+router.get("/fetchall", protect, getAllSchedules); // filtered by email
+router.delete("/delete/:scheduleId", protect, deleteSchedule);
 
 module.exports = router;

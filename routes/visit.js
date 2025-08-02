@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 
-// Import visit controller
 const { createVisit, deleteVisit } = require("../controllers/visitController");
 const { protect } = require("../middlewares/protect");
 
