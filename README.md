@@ -1,5 +1,12 @@
 # Managemydaura
-App for the netajee
+ManageMyDaura is an application designed to assist political party workers in efficiently tracking and managing the public engagements of a political leader (Netaji). It helps organize information related to events, meetings, visits, and outings, ensuring better coordination and communication within the team.
+
+## Features
+- 📅 Track public events and schedules
+- 🤝 Manage meetings and appointments
+- 📍 Record visits and outings
+- 🔄 Centralized system for team coordination
+- ⚡ Fast and lightweight Node.js backend
 
 ## Installation
 
@@ -38,3 +45,13 @@ If you're working on the project and want to run the app in development mode wit
 
 ```bash
 npm run dev
+```
+
+## Purpose
+This application is built to solve a real-world coordination problem in political organizations—ensuring that workers are always informed about:
+
+- Where the leader is going
+- What events are scheduled
+- Who is responsible for what
+
+It improves efficiency, reduces miscommunication, and enables better on-ground execution.
