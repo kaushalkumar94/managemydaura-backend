@@ -1,20 +1,15 @@
 const admin = require('firebase-admin');
 
-const privateKey = process.env.FIREBASE_PRIVATE_KEY
-  ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n').replace(/"/g, '')
-  : null;
+let serviceAccount;
 
-if (!privateKey) {
-  console.error('FIREBASE_PRIVATE_KEY is missing!');
-  process.exit(1);
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  serviceAccount = require('./serviceAccountKey.json');
 }
 
 admin.initializeApp({
-  credential: admin.credential.cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: privateKey,
-  })
+  credential: admin.credential.cert(serviceAccount)
 });
 
 const db = admin.firestore();
