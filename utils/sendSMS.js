@@ -10,14 +10,11 @@ const twilioWhatsAppNumber =
   process.env.TWILIO_WHATSAPP_PRODUCTION_NUMBER;
 
 let client;
-if (accountSid && authToken) {
+if (accountSid && authToken && accountSid.startsWith('AC')) {
   client = twilio(accountSid, authToken);
 } else {
-  console.error(
-    "Twilio credentials not found. Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in your .env file."
-  );
+  console.log("Twilio not configured — WhatsApp features disabled.");
 }
-
 async function sendSingleWhatsAppMessage(
   to,
   body,
